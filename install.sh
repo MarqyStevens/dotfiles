@@ -36,7 +36,8 @@ echo "🎉 Inštalácia dokončená!"
 mkdir -p "$HOME/.ssh"
 chmod 700 "$HOME/.ssh"
 if ! grep -q "dotfiles/config/ssh/config" "$HOME/.ssh/config" 2>/dev/null; then
-    echo "Include $DOTFILES_DIR/config/ssh/config" | cat - "$HOME/.ssh/config" 2>/dev/null > /tmp/ssh_cfg_tmp || echo "Include $DOTFILES_DIR/config/ssh/config" > /tmp/ssh_cfg_tmp
-    mv /tmp/ssh_cfg_tmp "$HOME/.ssh/config"
+    TMP_SSH="$HOME/.ssh/config.tmp"
+    echo "Include $DOTFILES_DIR/config/ssh/config" | cat - "$HOME/.ssh/config" 2>/dev/null > "$TMP_SSH" || echo "Include $DOTFILES_DIR/config/ssh/config" > "$TMP_SSH"
+    mv "$TMP_SSH" "$HOME/.ssh/config"
     chmod 600 "$HOME/.ssh/config"
 fi
