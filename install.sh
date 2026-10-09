@@ -31,3 +31,12 @@ if ! grep -q "DOTFILES_DIR" "$HOME/.bashrc" 2>/dev/null; then
 fi
 
 echo "🎉 Inštalácia dokončená!"
+
+# Zapojenie zdieľaného SSH configu
+mkdir -p "$HOME/.ssh"
+chmod 700 "$HOME/.ssh"
+if ! grep -q "dotfiles/config/ssh/config" "$HOME/.ssh/config" 2>/dev/null; then
+    echo "Include $DOTFILES_DIR/config/ssh/config" | cat - "$HOME/.ssh/config" 2>/dev/null > /tmp/ssh_cfg_tmp || echo "Include $DOTFILES_DIR/config/ssh/config" > /tmp/ssh_cfg_tmp
+    mv /tmp/ssh_cfg_tmp "$HOME/.ssh/config"
+    chmod 600 "$HOME/.ssh/config"
+fi

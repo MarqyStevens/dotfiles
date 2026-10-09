@@ -1,0 +1,17 @@
+# ==========================================
+# HOMELAB & LAN HOSTS (DOTFILES)
+# Dostupne doma priamo, aj zvonku cez Tailscale Subnet Router
+# ==========================================
+
+Host ms-streamer
+    HostName 192.168.0.215
+    Port 8022
+    User u0_a173
+
+Host ms-asus
+    HostName 192.168.0.114
+    User ms
+
+Host ms-thinkcentre
+    HostName 100.76.26.44
+    User ms
