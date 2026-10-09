@@ -36,6 +36,13 @@ APPS = [
         "package": "org.kde.kdeconnect_tp",
         "type": "fdroid",
         "repo_url": "https://f-droid.org/api/v1/packages/org.kde.kdeconnect_tp"
+    },
+    {
+        "name": "Material Files",
+        "package": "me.zhanghai.android.files",
+        "type": "github",
+        "repo": "zhanghai/MaterialFiles",
+        "match": lambda f: f.endswith(".apk") and "debug" not in f
     }
 ]
 
@@ -117,7 +124,7 @@ def update_app(app):
             return
 
         if not apk_url:
-            print(f"   ⚠️  Nenašiel sa vhodný 32-bit APK asset pre update.\n")
+            print(f"   ⚠️  Nenašiel sa vhodný APK asset pre update.\n")
             return
 
         local_path = f"/tmp/{apk_name}"
