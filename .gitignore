@@ -1,0 +1,6 @@
+*.local
+*.secret
+*.log
+__pycache__/
+*.pyc
+.DS_Store

@@ -1,0 +1,98 @@
+format = """
+[╭─](238)$os$username$hostname$localip$directory$git_branch$git_status$c$rust$golang$nodejs$php$java$kotlin$haskell$python$docker_context$conda
+[╰─](238)$character"""
+
+[os]
+disabled = false
+format = "[$symbol]($style)"
+style = "bold white"
+
+[os.symbols]
+Debian = "  "
+Android = "  "
+
+[username]
+style_user = "bold 208"
+style_root = "bold red"
+format = "[$user]($style) "
+disabled = false
+show_always = true
+
+[hostname]
+ssh_only = false
+format = "at [$hostname](<bold 208>) "
+disabled = false
+
+[directory]
+style = "bold 39"
+format = "in [$path]($style)[$read_only]($read_only_style) "
+truncation_length = 3
+truncation_symbol = "…/"
+
+[git_branch]
+symbol = " "
+style = "bold 214"
+format = "on [$symbol$branch]($style) "
+
+[git_status]
+style = "bold 196"
+format = '([\[$all_status$ahead_behind\]]($style) )'
+
+[c]
+symbol = " "
+style = "bold 149"
+format = "via [$symbol($version)]($style) "
+
+[rust]
+symbol = " "
+style = "bold 202"
+format = "via [$symbol($version)]($style) "
+
+[golang]
+symbol = " "
+style = "bold 74"
+format = "via [$symbol($version)]($style) "
+
+[nodejs]
+symbol = " "
+style = "bold 70"
+format = "via [$symbol($version)]($style) "
+
+[php]
+symbol = " "
+style = "bold 99"
+format = "via [$symbol($version)]($style) "
+
+[java]
+symbol = " "
+style = "bold 160"
+format = "via [$symbol($version)]($style) "
+
+[kotlin]
+symbol = "🅺 "
+style = "bold 93"
+format = "via [$symbol($version)]($style) "
+
+[haskell]
+symbol = " "
+style = "bold 105"
+format = "via [$symbol($version)]($style) "
+
+[python]
+symbol = " "
+style = "bold 226"
+format = "via [${symbol}${pyenv_prefix}(${version} )(\\($virtualenv\\))]($style) "
+
+[docker_context]
+symbol = " "
+style = "bold 68"
+format = "via [$symbol$context]($style) "
+
+[conda]
+symbol = " "
+style = "bold 76"
+format = "via [$symbol$environment]($style) "
+
+[character]
+success_symbol = "[❯](<bold 46>)"
+error_symbol = "[❯](<bold 196>)"
