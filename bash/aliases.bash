@@ -15,6 +15,7 @@ alias q='exit'
 alias ports='ss -tulpn'
 alias myip='hostname -I | awk "{print \$1}"'
 alias ftp-bookmarks='lftp -e "bookmark list; exit"'
+alias tv='adb connect 192.168.0.215:5555'
 alias df='df -h'
 alias free='free -h'
 

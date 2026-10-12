@@ -3,13 +3,11 @@
 export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
 export EDITOR="${EDITOR:-micro}"
 
-# Bitwarden SSH agent (detekuje automaticky Flatpak aj natívnu inštaláciu)
-if [ -z "$SSH_AUTH_SOCK" ]; then
-    if [ -S "$HOME/.var/app/com.bitwarden.desktop/data/.bitwarden-ssh-agent.sock" ]; then
-        export SSH_AUTH_SOCK="$HOME/.var/app/com.bitwarden.desktop/data/.bitwarden-ssh-agent.sock"
-    elif [ -S "$HOME/.bitwarden-ssh-agent.sock" ]; then
-        export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
-    fi
+# Bitwarden SSH agent (detekuje automaticky Flatpak aj natívnu inštaláciu a prebije defaultný gnome-keyring)
+if [ -S "$HOME/.var/app/com.bitwarden.desktop/data/.bitwarden-ssh-agent.sock" ]; then
+    export SSH_AUTH_SOCK="$HOME/.var/app/com.bitwarden.desktop/data/.bitwarden-ssh-agent.sock"
+elif [ -S "$HOME/.bitwarden-ssh-agent.sock" ]; then
+    export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
 fi
 
 # Zoxide (inteligentné cd)
@@ -60,9 +58,21 @@ if command -v fzf >/dev/null 2>&1; then
 fi
 
 # ==========================================
-# Starship Prompt
+# Starship Prompt (s fallbackom pre kontajnery bez starshipu)
 # ==========================================
 if command -v starship >/dev/null 2>&1; then
     export starship_precmd_user_func="set_tab_title"
     eval "$(starship init bash)"
+elif [ -n "$CONTAINER_ID" ]; then
+    if [[ "$CONTAINER_ID" == *"debian"* ]]; then
+        C_COLOR="\[\e[31m\]"
+    elif [[ "$CONTAINER_ID" == *"fedora"* ]]; then
+        C_COLOR="\[\e[34m\]"
+    elif [[ "$CONTAINER_ID" == *"ubuntu"* ]]; then
+        C_COLOR="\[\e[38;5;208m\]"
+    else
+        C_COLOR="\[\e[32m\]"
+    fi
+    C_RESET="\[\e[0m\]"
+    PS1="📦[\u@${C_COLOR}${CONTAINER_ID}${C_RESET} \W]\$ "
 fi

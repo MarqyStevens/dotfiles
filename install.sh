@@ -21,7 +21,7 @@ if command -v batcat >/dev/null 2>&1 && [ ! -f "$HOME/.local/bin/bat" ]; then
     ln -sf "$(command -v batcat)" "$HOME/.local/bin/bat"
 fi
 
-if ! grep -q "DOTFILES_DIR" "$HOME/.bashrc" 2>/dev/null; then
+if ! grep -q "MODULAR DOTFILES" "$HOME/.bashrc" 2>/dev/null; then
     echo "" >> "$HOME/.bashrc"
     echo "# === MODULAR DOTFILES ===" >> "$HOME/.bashrc"
     echo "if [ -f \"$DOTFILES_DIR/bash/main.bash\" ]; then" >> "$HOME/.bashrc"
