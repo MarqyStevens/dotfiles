@@ -1,9 +1,24 @@
 # Moderné náhrady za staré unixové príkazy
-alias ls='eza --icons --group-directories-first 2>/dev/null || ls --color=auto'
-alias ll='eza -la --icons --group-directories-first 2>/dev/null || ls -la --color=auto'
-alias cat='bat --style=plain --paging=never 2>/dev/null || cat'
-alias grep='rg 2>/dev/null || grep --color=auto'
-alias find='fd 2>/dev/null || find'
+if command -v eza >/dev/null 2>&1; then
+    alias ls='eza --icons --group-directories-first'
+    alias ll='eza -la --icons --group-directories-first'
+    alias la='eza -a --icons --group-directories-first'
+    alias lt='eza --tree --level=2 --icons'
+else
+    alias ls='ls --color=auto'
+    alias ll='ls -la --color=auto'
+    alias la='ls -a --color=auto'
+fi
+
+if command -v bat >/dev/null 2>&1; then
+    alias cat='bat --style=plain --paging=never'
+fi
+
+if ! command -v fd >/dev/null 2>&1 && command -v fdfind >/dev/null 2>&1; then
+    alias fd='fdfind'
+fi
+
+alias grep='grep --color=auto'
 
 # Navigácia
 alias ..='cd ..'
