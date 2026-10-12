@@ -9,14 +9,14 @@ echo "⚡ BOOTSTRAP: Inicializácia nového stroja do flotily..."
 if command -v dnf >/dev/null 2>&1; then
     echo "📦 Detekovaná Fedora / RHEL rodina (DNF)..."
     sudo dnf install -y curl wget git nano micro lftp eza bat ripgrep fd-find fzf zoxide qrencode || true
+elif [ -n "$TERMUX_VERSION" ] || command -v pkg >/dev/null 2>&1; then
+    echo "📦 Detekovaný Android / Termux (PKG)..."
+    pkg update -y
+    pkg install -y curl wget git nano micro lftp eza bat ripgrep fd fzf zoxide starship openssh libqrencode || true
 elif command -v apt >/dev/null 2>&1; then
     echo "📦 Detekovaný Debian / Ubuntu / Raspbian (APT)..."
     sudo apt update
     sudo apt install -y curl wget git nano micro lftp eza fd-find bat zoxide fzf ripgrep qrencode || true
-elif command -v pkg >/dev/null 2>&1; then
-    echo "📦 Detekovaný Android / Termux (PKG)..."
-    pkg update -y
-    pkg install -y curl wget git nano micro lftp eza bat ripgrep fd fzf zoxide starship openssh || true
 elif command -v pacman >/dev/null 2>&1; then
     echo "📦 Detekovaný Arch Linux (Pacman)..."
     sudo pacman -S --noconfirm curl wget git nano micro lftp eza bat ripgrep fd fzf zoxide starship || true
