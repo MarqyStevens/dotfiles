@@ -33,6 +33,10 @@ if ! grep -q "MODULAR DOTFILES" "$HOME/.bashrc" 2>/dev/null; then
     echo "fi" >> "$HOME/.bashrc"
     echo "✅ Dotfiles zaregistrované v ~/.bashrc"
 fi
+# Nastavenie fontu pre LXTerminal (ak existuje)
+if [ -f "$HOME/.config/lxterminal/lxterminal.conf" ] && fc-list : family 2>/dev/null | grep -qi "AdwaitaMono Nerd Font"; then
+    sed -i 's/^fontname=.*/fontname=AdwaitaMono Nerd Font 10/' "$HOME/.config/lxterminal/lxterminal.conf"
+fi
 
 echo "🎉 Inštalácia dokončená!"
 

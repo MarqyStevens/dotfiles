@@ -38,7 +38,30 @@ if ! command -v starship >/dev/null 2>&1; then
     curl -sS https://starship.rs/install.sh | sh -s -- -y -b "$HOME/.local/bin"
 fi
 
-# 4. Spustenie prelinkovania konfigurácií
+# 4. Inštalácia AdwaitaMono Nerd Font (ak chýba)
+if ! fc-list : family 2>/dev/null | grep -qi "AdwaitaMono Nerd Font"; then
+    echo "🔤 Inštalujem AdwaitaMono Nerd Font..."
+    mkdir -p "$HOME/.local/share/fonts/AdwaitaMono"
+    if curl -fLo /tmp/AdwaitaMono.tar.xz https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/AdwaitaMono.tar.xz 2>/dev/null; then
+        tar -xf /tmp/AdwaitaMono.tar.xz -C "$HOME/.local/share/fonts/AdwaitaMono" 2>/dev/null || true
+        rm -f /tmp/AdwaitaMono.tar.xz
+        if command -v fc-cache >/dev/null 2>&1; then
+            fc-cache -f "$HOME/.local/share/fonts" 2>/dev/null || true
+        fi
+        echo "✅ AdwaitaMono Nerd Font nainštalovaný."
+    fi
+fi
+
+# Termux podpora pre font
+if [ -n "$TERMUX_VERSION" ] || [ -d "$HOME/.termux" ]; then
+    mkdir -p "$HOME/.termux"
+    if [ -f "$HOME/.local/share/fonts/AdwaitaMono/AdwaitaMonoNerdFont-Regular.ttf" ]; then
+        cp -f "$HOME/.local/share/fonts/AdwaitaMono/AdwaitaMonoNerdFont-Regular.ttf" "$HOME/.termux/font.ttf"
+        termux-reload-settings 2>/dev/null || true
+    fi
+fi
+
+# 5. Spustenie prelinkovania konfigurácií
 "$DOTFILES_DIR/install.sh"
 
 echo "🎉 Hotovo! Zadaj: source ~/.bashrc"
