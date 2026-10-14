@@ -62,20 +62,17 @@ frg() {
 # Bitwarden CLI & SSH Helpers
 # ==========================================
 bw-unlock() {
-    local token
-    token="$(bw unlock --raw "$@")" || return 1
-    export BW_SESSION="$token"
-    local sess_dir="/run/user/$(id -u 2>/dev/null || id -u)"
-    mkdir -p "$sess_dir" 2>/dev/null || true
-    echo "$token" > "$sess_dir/bw_session" 2>/dev/null || true
-    chmod 600 "$sess_dir/bw_session" 2>/dev/null || true
-    echo "✅ Vault odomknutý a session uložená v RAM."
-    
-    # Automaticky načítaj SSH kľúče iba ak nebeží desktop GUI agent
-    if [ ! -S "$HOME/.var/app/com.bitwarden.desktop/data/.bitwarden-ssh-agent.sock" ] && [ ! -S "$HOME/.bitwarden-ssh-agent.sock" ]; then
-        if command -v bw-ssh >/dev/null 2>&1; then
-            bw-ssh load
-        fi
+    if command -v bw-ssh >/dev/null 2>&1; then
+        bw-ssh load "$@"
+    else
+        local token
+        token="$(bw unlock --raw "$@")" || return 1
+        export BW_SESSION="$token"
+        local sess_dir="/run/user/$(id -u 2>/dev/null || id -u)"
+        mkdir -p "$sess_dir" 2>/dev/null || true
+        echo "$token" > "$sess_dir/bw_session" 2>/dev/null || true
+        chmod 600 "$sess_dir/bw_session" 2>/dev/null || true
+        echo "✅ Vault odomknutý a session uložená v RAM."
     fi
 }
 

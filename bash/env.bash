@@ -1,6 +1,7 @@
 # === DOTFILES: ENVIRONMENT & SHELL INTEGRATION ===
 
 export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+[ -d "/usr/lib/ccache" ] && export PATH="/usr/lib/ccache:$PATH"
 export EDITOR="${EDITOR:-micro}"
 
 # Bitwarden SSH agent (detekuje automaticky Flatpak aj natívnu inštaláciu a prebije defaultný gnome-keyring)

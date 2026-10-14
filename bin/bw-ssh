@@ -2,6 +2,7 @@
 """
 bw-ssh: Universal Bitwarden SSH Agent bridge for the squad.
 Works portably across Fedora, Debian, Raspberry Pi OS, and Termux.
+Supports GUI prompt (Zenity), Master Password, and local AES-256 PIN unlock.
 Loads SSH private keys directly from Bitwarden into ssh-agent memory without writing to disk.
 """
 
@@ -10,9 +11,65 @@ import os
 import subprocess
 import json
 import getpass
+import shutil
 
 UID = os.getuid()
 SESSION_FILE = f"/run/user/{UID}/bw_session" if os.path.exists(f"/run/user/{UID}") else f"/tmp/bw_session_{UID}"
+PIN_DIR = os.path.expanduser("~/.local/share/bw")
+PIN_FILE = os.path.join(PIN_DIR, "pin.enc")
+
+def prompt_password(prompt_text, title="Bitwarden Authentication", force_gui=False):
+    # 1. If running in an interactive terminal and GUI not explicitly requested, prompt in terminal
+    if sys.stdin.isatty() and not force_gui:
+        try:
+            return getpass.getpass(f"{prompt_text} ")
+        except Exception:
+            pass
+
+    # 2. Try GUI prompt (Zenity) if display server is present
+    has_display = bool(os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY"))
+    if has_display and shutil.which("zenity"):
+        try:
+            res = subprocess.run(
+                ["zenity", "--password", f"--title={title}", f"--text={prompt_text}"],
+                capture_output=True, text=True
+            )
+            if res.returncode == 0:
+                return res.stdout.rstrip('\r\n')
+            else:
+                return None
+        except Exception:
+            pass
+
+    # 3. Fallback to CLI getpass
+    try:
+        return getpass.getpass(f"{prompt_text} ")
+    except Exception:
+        return None
+
+def encrypt_master_password(password, pin):
+    os.makedirs(PIN_DIR, mode=0o700, exist_ok=True)
+    cmd = [
+        "openssl", "enc", "-aes-256-cbc", "-pbkdf2", "-iter", "100000",
+        "-salt", "-pass", f"pass:{pin}", "-out", PIN_FILE
+    ]
+    res = subprocess.run(cmd, input=password, text=True, capture_output=True)
+    if res.returncode == 0:
+        os.chmod(PIN_FILE, 0o600)
+        return True
+    return False
+
+def decrypt_master_password(pin):
+    if not os.path.exists(PIN_FILE):
+        return None
+    cmd = [
+        "openssl", "enc", "-d", "-aes-256-cbc", "-pbkdf2", "-iter", "100000",
+        "-pass", f"pass:{pin}", "-in", PIN_FILE
+    ]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if res.returncode == 0 and res.stdout:
+        return res.stdout.strip()
+    return None
 
 def get_session():
     # 1. Environment variable
@@ -29,13 +86,32 @@ def get_session():
             pass
     return None
 
-def unlock_vault():
+def unlock_vault(force_gui=False):
     print("🔒 Bitwarden vault is locked.")
-    password = getpass.getpass("Enter Bitwarden Master Password: ")
+    password = None
+
+    if os.path.exists(PIN_FILE):
+        pin = prompt_password("Zadaj Bitwarden PIN:", title="Bitwarden PIN", force_gui=force_gui)
+        if not pin:
+            print("❌ Zrušené používateľom.", file=sys.stderr)
+            sys.exit(1)
+        password = decrypt_master_password(pin)
+        if not password:
+            print("❌ Nesprávny PIN.", file=sys.stderr)
+            password = prompt_password("Nesprávny PIN. Zadaj Master Password:", title="Bitwarden Master Password", force_gui=force_gui)
+            if not password:
+                sys.exit(1)
+    else:
+        password = prompt_password("Zadaj Bitwarden Master Password:", title="Bitwarden Master Password", force_gui=force_gui)
+        if not password:
+            print("❌ Zrušené používateľom.", file=sys.stderr)
+            sys.exit(1)
+
     res = subprocess.run(["bw", "unlock", password, "--raw"], capture_output=True, text=True)
     if res.returncode != 0:
         print(f"❌ Unlock failed: {res.stderr.strip()}", file=sys.stderr)
         sys.exit(1)
+
     token = res.stdout.strip()
     try:
         with open(SESSION_FILE, "w") as f:
@@ -45,18 +121,18 @@ def unlock_vault():
         print(f"⚠️ Warning: Could not write session cache: {e}", file=sys.stderr)
     return token
 
-def ensure_session():
+def ensure_session(force_gui=False):
     token = get_session()
     if not token:
-        token = unlock_vault()
+        token = unlock_vault(force_gui=force_gui)
     # Test if valid
     res = subprocess.run(["bw", "status", "--session", token], capture_output=True, text=True)
     try:
         status_data = json.loads(res.stdout)
         if status_data.get("status") != "unlocked":
-            token = unlock_vault()
+            token = unlock_vault(force_gui=force_gui)
     except Exception:
-        token = unlock_vault()
+        token = unlock_vault(force_gui=force_gui)
     return token
 
 def find_ssh_items(session, target_name=None):
@@ -70,7 +146,6 @@ def find_ssh_items(session, target_name=None):
     
     for item in items:
         name = item.get("name", "")
-        # Filter if a specific name was asked
         if target_name and target_name.lower() not in name.lower():
             continue
         
@@ -135,6 +210,46 @@ def cmd_load(args):
             
     print(f"\n🔑 Total keys active in ssh-agent: {loaded_count}")
 
+def cmd_set_pin(args):
+    force_gui = "--gui" in args
+    print("🔑 Nastavenie rýchleho PIN-u pre Bitwarden:")
+    pw = prompt_password("Zadaj svoje Bitwarden Master Password:", title="Bitwarden Master Password", force_gui=force_gui)
+    if not pw:
+        print("❌ Zrušené.")
+        return
+
+    print("⏳ Overujem Master Password...")
+    test_res = subprocess.run(["bw", "unlock", pw, "--raw"], capture_output=True, text=True)
+    if test_res.returncode != 0:
+        print(f"❌ Neplatné Master Password: {test_res.stderr.strip()}", file=sys.stderr)
+        return
+
+    pin1 = prompt_password("Zvoľ si nový PIN (napr. 4-8 čísel):", title="Nový Bitwarden PIN", force_gui=force_gui)
+    if not pin1:
+        print("❌ Zrušené.")
+        return
+    pin2 = prompt_password("Potvrď nový PIN:", title="Potvrdenie PIN-u", force_gui=force_gui)
+    if pin1 != pin2:
+        print("❌ PINy sa nezhodujú.")
+        return
+
+    if encrypt_master_password(pw, pin1):
+        token = test_res.stdout.strip()
+        with open(SESSION_FILE, "w") as f:
+            f.write(token)
+        os.chmod(SESSION_FILE, 0o600)
+        print("✅ PIN bol úspešne nastavený a trezor odomknutý!")
+        print(f"📁 Zašifrované v {PIN_FILE} (AES-256-CBC, PBKDF2 100 000 iterácií).")
+    else:
+        print("❌ Chyba pri šifrovaní PIN-u.", file=sys.stderr)
+
+def cmd_remove_pin(args):
+    if os.path.exists(PIN_FILE):
+        os.remove(PIN_FILE)
+        print("🗑️ PIN bol odstránený. Na odomykanie sa bude používať Master Password.")
+    else:
+        print("Žiadny PIN nebol nastavený.")
+
 def cmd_list(args):
     session = ensure_session()
     items = find_ssh_items(session)
@@ -158,6 +273,9 @@ def cmd_status(args):
         print("Session cached: NO")
         print(res.stdout.strip())
         
+    pin_status = "Nastavený (AES-256 PBKDF2)" if os.path.exists(PIN_FILE) else "Nenastavený"
+    print(f"PIN unlock: {pin_status}")
+
     print("\n--- ssh-agent Identities ---")
     subprocess.run(["ssh-add", "-l"])
 
@@ -165,7 +283,6 @@ def cmd_lock(args):
     if os.path.exists(SESSION_FILE):
         os.remove(SESSION_FILE)
     subprocess.run(["bw", "lock"])
-    # optionally remove keys from ssh-agent
     subprocess.run(["ssh-add", "-D"])
     print("🔒 Vault locked, session cache deleted, and ssh-agent identities cleared.")
 
@@ -173,10 +290,12 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] in ["-h", "--help", "help"]:
         print("Usage: bw-ssh [command] [args]")
         print("Commands:")
-        print("  load [name]    Load SSH key(s) into ssh-agent (default)")
-        print("  list           List all SSH keys in vault")
-        print("  status         Check vault & ssh-agent status")
-        print("  lock           Lock vault, delete session, clear ssh-agent")
+        print("  load [name]      Load SSH key(s) into ssh-agent (default)")
+        print("  set-pin          Set up quick PIN unlock (GUI prompt or CLI)")
+        print("  remove-pin       Remove PIN unlock and revert to Master Password")
+        print("  list             List all SSH keys in vault")
+        print("  status           Check vault & ssh-agent status")
+        print("  lock             Lock vault, delete session, clear ssh-agent")
         return
 
     subcmd = sys.argv[1] if len(sys.argv) > 1 else "load"
@@ -187,10 +306,13 @@ def main():
         cmd_status(sys.argv[2:])
     elif subcmd == "lock":
         cmd_lock(sys.argv[2:])
+    elif subcmd == "set-pin":
+        cmd_set_pin(sys.argv[2:])
+    elif subcmd == "remove-pin":
+        cmd_remove_pin(sys.argv[2:])
     elif subcmd == "load":
         cmd_load(sys.argv[2:])
     else:
-        # User passed a name directly, e.g. `bw-ssh dagodkey`
         cmd_load(sys.argv[1:])
 
 if __name__ == "__main__":
