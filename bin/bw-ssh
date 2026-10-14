@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+"""
+bw-ssh: Universal Bitwarden SSH Agent bridge for the squad.
+Works portably across Fedora, Debian, Raspberry Pi OS, and Termux.
+Loads SSH private keys directly from Bitwarden into ssh-agent memory without writing to disk.
+"""
+
+import sys
+import os
+import subprocess
+import json
+import getpass
+
+UID = os.getuid()
+SESSION_FILE = f"/run/user/{UID}/bw_session" if os.path.exists(f"/run/user/{UID}") else f"/tmp/bw_session_{UID}"
+
+def get_session():
+    # 1. Environment variable
+    if os.environ.get("BW_SESSION"):
+        return os.environ["BW_SESSION"].strip()
+    # 2. Ramfs session file
+    if os.path.exists(SESSION_FILE):
+        try:
+            with open(SESSION_FILE, "r") as f:
+                token = f.read().strip()
+                if token:
+                    return token
+        except Exception:
+            pass
+    return None
+
+def unlock_vault():
+    print("🔒 Bitwarden vault is locked.")
+    password = getpass.getpass("Enter Bitwarden Master Password: ")
+    res = subprocess.run(["bw", "unlock", password, "--raw"], capture_output=True, text=True)
+    if res.returncode != 0:
+        print(f"❌ Unlock failed: {res.stderr.strip()}", file=sys.stderr)
+        sys.exit(1)
+    token = res.stdout.strip()
+    try:
+        with open(SESSION_FILE, "w") as f:
+            f.write(token)
+        os.chmod(SESSION_FILE, 0o600)
+    except Exception as e:
+        print(f"⚠️ Warning: Could not write session cache: {e}", file=sys.stderr)
+    return token
+
+def ensure_session():
+    token = get_session()
+    if not token:
+        token = unlock_vault()
+    # Test if valid
+    res = subprocess.run(["bw", "status", "--session", token], capture_output=True, text=True)
+    try:
+        status_data = json.loads(res.stdout)
+        if status_data.get("status") != "unlocked":
+            token = unlock_vault()
+    except Exception:
+        token = unlock_vault()
+    return token
+
+def find_ssh_items(session, target_name=None):
+    res = subprocess.run(["bw", "list", "items", "--session", session], capture_output=True, text=True)
+    if res.returncode != 0:
+        print(f"❌ Failed to query items: {res.stderr.strip()}", file=sys.stderr)
+        sys.exit(1)
+    
+    items = json.loads(res.stdout)
+    ssh_items = []
+    
+    for item in items:
+        name = item.get("name", "")
+        # Filter if a specific name was asked
+        if target_name and target_name.lower() not in name.lower():
+            continue
+        
+        # Type 5: Dedicated SSH Key Item
+        if item.get("type") == 5 and "sshKey" in item and item["sshKey"].get("privateKey"):
+            ssh_items.append({
+                "id": item.get("id"),
+                "name": name,
+                "type": "native-ssh-key",
+                "private_key": item["sshKey"]["privateKey"],
+                "public_key": item["sshKey"].get("publicKey", ""),
+                "fingerprint": item["sshKey"].get("keyFingerprint", "")
+            })
+        # Type 2 / 1: Secure Note or Login with private key in notes
+        elif "PRIVATE KEY" in (item.get("notes") or ""):
+            ssh_items.append({
+                "id": item.get("id"),
+                "name": name,
+                "type": "secure-note",
+                "private_key": item.get("notes", ""),
+                "public_key": "",
+                "fingerprint": ""
+            })
+            
+    return ssh_items
+
+def load_key_into_agent(private_key, lifetime=None):
+    if not private_key.endswith("\n"):
+        private_key += "\n"
+    cmd = ["ssh-add"]
+    if lifetime:
+        cmd.extend(["-t", lifetime])
+    cmd.append("-")
+    
+    res = subprocess.run(cmd, input=private_key, text=True, capture_output=True)
+    if res.returncode == 0:
+        return True, res.stderr.strip()
+    else:
+        return False, res.stderr.strip()
+
+def cmd_load(args):
+    session = ensure_session()
+    target_name = args[0] if args else None
+    items = find_ssh_items(session, target_name)
+    
+    if not items:
+        if target_name:
+            print(f"❌ No SSH key matching '{target_name}' found in vault.")
+        else:
+            print("❌ No SSH keys found in Bitwarden vault.")
+        sys.exit(1)
+        
+    loaded_count = 0
+    for item in items:
+        success, msg = load_key_into_agent(item["private_key"])
+        if success:
+            fp = f"({item['fingerprint']})" if item['fingerprint'] else ""
+            print(f"✅ Loaded '{item['name']}' {fp} permanently into ssh-agent")
+            loaded_count += 1
+        else:
+            print(f"❌ Failed to load '{item['name']}': {msg}", file=sys.stderr)
+            
+    print(f"\n🔑 Total keys active in ssh-agent: {loaded_count}")
+
+def cmd_list(args):
+    session = ensure_session()
+    items = find_ssh_items(session)
+    if not items:
+        print("No SSH keys found in vault.")
+        return
+    print(f"Found {len(items)} SSH key(s) in Bitwarden vault:\n")
+    for i, item in enumerate(items, 1):
+        fp = item.get('fingerprint') or "N/A"
+        print(f"  {i}. {item['name']} [{item['type']}] - Fingerprint: {fp}")
+
+def cmd_status(args):
+    session = get_session()
+    print("--- Bitwarden CLI Status ---")
+    if session:
+        res = subprocess.run(["bw", "status", "--session", session], capture_output=True, text=True)
+        print(f"Session cached: YES ({SESSION_FILE})")
+        print(res.stdout.strip())
+    else:
+        res = subprocess.run(["bw", "status"], capture_output=True, text=True)
+        print("Session cached: NO")
+        print(res.stdout.strip())
+        
+    print("\n--- ssh-agent Identities ---")
+    subprocess.run(["ssh-add", "-l"])
+
+def cmd_lock(args):
+    if os.path.exists(SESSION_FILE):
+        os.remove(SESSION_FILE)
+    subprocess.run(["bw", "lock"])
+    # optionally remove keys from ssh-agent
+    subprocess.run(["ssh-add", "-D"])
+    print("🔒 Vault locked, session cache deleted, and ssh-agent identities cleared.")
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] in ["-h", "--help", "help"]:
+        print("Usage: bw-ssh [command] [args]")
+        print("Commands:")
+        print("  load [name]    Load SSH key(s) into ssh-agent (default)")
+        print("  list           List all SSH keys in vault")
+        print("  status         Check vault & ssh-agent status")
+        print("  lock           Lock vault, delete session, clear ssh-agent")
+        return
+
+    subcmd = sys.argv[1] if len(sys.argv) > 1 else "load"
+    
+    if subcmd == "list":
+        cmd_list(sys.argv[2:])
+    elif subcmd == "status":
+        cmd_status(sys.argv[2:])
+    elif subcmd == "lock":
+        cmd_lock(sys.argv[2:])
+    elif subcmd == "load":
+        cmd_load(sys.argv[2:])
+    else:
+        # User passed a name directly, e.g. `bw-ssh dagodkey`
+        cmd_load(sys.argv[1:])
+
+if __name__ == "__main__":
+    main()

@@ -10,6 +10,15 @@ elif [ -S "$HOME/.bitwarden-ssh-agent.sock" ]; then
     export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
 fi
 
+# Bitwarden CLI in-memory session loader (RAMFS tmpfs)
+if [ -z "$BW_SESSION" ]; then
+    _BW_SESS_FILE="/run/user/$(id -u 2>/dev/null || id -u)/bw_session"
+    if [ -f "$_BW_SESS_FILE" ]; then
+        export BW_SESSION="$(cat "$_BW_SESS_FILE")"
+    fi
+    unset _BW_SESS_FILE
+fi
+
 # Zoxide (inteligentné cd)
 if command -v zoxide >/dev/null 2>&1; then 
     eval "$(zoxide init bash)"

@@ -39,3 +39,16 @@ alias gs='git status'
 alias gp='git pull'
 alias gpush='git push'
 alias gd='git diff'
+
+# Pi & Hardvér diagnostika (iba ak existuje vcgencmd)
+if command -v vcgencmd >/dev/null 2>&1; then
+    alias pi-health='vcgencmd measure_temp && vcgencmd measure_clock arm && vcgencmd get_throttled'
+fi
+
+# Hardvérové 1080p streamovanie (nízka záťaž procesora)
+if command -v mpv >/dev/null 2>&1; then
+    alias play='mpv --ytdl-format="bestvideo[height<=1080]+bestaudio/best"'
+fi
+
+# AI nástroje
+alias agy-boost='agy --boost'
