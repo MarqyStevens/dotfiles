@@ -140,3 +140,11 @@ victor() {
 
     echo -e "\033[1;32m[✓] Target neutralized. Crime scene clean. Shaders untouched.\033[0m"
 }
+
+# Smart Antigravity CLI launcher — auto-cd into ~/skuad/<hostname> when launched from $HOME
+agy() {
+    if [ "$PWD" = "$HOME" ] && [ -d "$HOME/skuad/$(hostname)" ]; then
+        cd "$HOME/skuad/$(hostname)" || return
+    fi
+    command agy "$@"
+}
