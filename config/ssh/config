@@ -1,17 +1,50 @@
 # ==========================================
-# HOMELAB & LAN HOSTS (DOTFILES)
-# Dostupne doma priamo, aj zvonku cez Tailscale Subnet Router
+# SKUAD FLEET SSH CONFIG (DOTFILES)
 # ==========================================
 
-Host ms-streamer
-    HostName 192.168.0.215
-    Port 8022
-    User u0_a173
-
+# --- Tailscale Mesh (works everywhere: home + work) ---
 Host ms-asus
-    HostName 192.168.0.114
+    HostName 100.89.119.100
+    User ms
+
+Host ms-slimbook
+    HostName 100.95.136.60
     User ms
 
 Host ms-thinkcentre
     HostName 100.76.26.44
     User ms
+
+Host debian
+    HostName 100.74.85.84
+
+# --- Home LAN Fallbacks (same router, Tailscale OFF) ---
+Host ms-asus-lan
+    HostName 192.168.0.114
+    User ms
+
+Host ms-slimbook-lan
+    HostName 192.168.0.110
+    User ms
+
+Host ms-thinkcentre-lan
+    HostName 192.168.0.176
+    User ms
+
+# --- Packed / Optional ---
+# Host ms-pi
+#     HostName 100.88.145.10
+#     User ms
+#
+# Host ms-streamer
+#     HostName 192.168.0.215
+#     Port 8022
+#     User u0_a173
+
+# --- Global Defaults (multiplexing + keepalive) ---
+Host *
+    ControlMaster auto
+    ControlPath ~/.ssh/cm-%r@%h:%p
+    ControlPersist 10m
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
