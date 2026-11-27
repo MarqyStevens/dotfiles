@@ -61,45 +61,90 @@ frg() {
 # ==========================================
 # Bitwarden CLI & SSH Helpers
 # ==========================================
+bw() {
+    case "$1" in
+        get|list|sync|create|edit|delete|restore|send|export)
+            case " $* " in
+                *" --session "*|*" --help "*|*" -h "*)
+                    command bw "$@"
+                    return $?
+                    ;;
+            esac
+            if command -v bw-ssh >/dev/null 2>&1; then
+                local token
+                token="$(bw-ssh session)" || return 1
+                export BW_SESSION="$token"
+                command bw "$@" --session "$BW_SESSION"
+                return $?
+            fi
+            ;;
+        lock)
+            unset BW_SESSION
+            ;;
+    esac
+    command bw "$@"
+}
+
 bw-unlock() {
+    local sess_file="/run/user/$(id -u 2>/dev/null || id -u)/bw_session"
     if command -v bw-ssh >/dev/null 2>&1; then
-        bw-ssh load "$@"
+        bw-ssh load "$@" || return 1
+        if [ -f "$sess_file" ]; then
+            export BW_SESSION="$(cat "$sess_file")"
+        fi
     else
         local token
-        token="$(bw unlock --raw "$@")" || return 1
+        token="$(command bw unlock --raw "$@")" || return 1
         export BW_SESSION="$token"
-        local sess_dir="/run/user/$(id -u 2>/dev/null || id -u)"
-        mkdir -p "$sess_dir" 2>/dev/null || true
-        echo "$token" > "$sess_dir/bw_session" 2>/dev/null || true
-        chmod 600 "$sess_dir/bw_session" 2>/dev/null || true
+        mkdir -p "$(dirname "$sess_file")" 2>/dev/null || true
+        echo "$token" > "$sess_file" 2>/dev/null || true
+        chmod 600 "$sess_file" 2>/dev/null || true
         echo "✅ Vault odomknutý a session uložená v RAM."
     fi
 }
 
 bw-lock() {
+    unset BW_SESSION
     if command -v bw-ssh >/dev/null 2>&1; then
         bw-ssh lock
     else
         rm -f "/run/user/$(id -u 2>/dev/null || id -u)/bw_session"
-        bw lock
+        command bw lock
     fi
 }
 
 bw-copy() {
+    local field="password"
+    local label="Heslo"
+    case "$1" in
+        -u|--user|--username)
+            field="username"
+            label="Meno"
+            shift
+            ;;
+        -t|--totp)
+            field="totp"
+            label="TOTP kód"
+            shift
+            ;;
+    esac
     if [ -z "$1" ]; then
-        echo "Použitie: bw-copy <názov_položky>"
+        echo "Použitie: bw-copy [-u|-t] <názov_položky>"
         return 1
     fi
-    local pass
-    pass="$(bw get password "$1")" || return 1
+    local val
+    val="$(bw get "$field" "$1")" || return 1
     if command -v wl-copy >/dev/null 2>&1; then
-        echo -n "$pass" | wl-copy
+        printf '%s' "$val" | wl-copy
     elif command -v xclip >/dev/null 2>&1; then
-        echo -n "$pass" | xclip -selection clipboard
+        printf '%s' "$val" | xclip -selection clipboard
     elif command -v termux-clipboard-set >/dev/null 2>&1; then
-        echo -n "$pass" | termux-clipboard-set
+        printf '%s' "$val" | termux-clipboard-set
+    else
+        printf '%s\n' "$val"
+        return 0
     fi
-    echo "📋 Heslo pre '$1' bolo skopírované do schránky!"
+    echo "📋 $label pre '$1' bolo skopírované do schránky!"
 }
 
 # ==========================================

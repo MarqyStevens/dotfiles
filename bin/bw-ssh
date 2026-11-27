@@ -72,10 +72,7 @@ def decrypt_master_password(pin):
     return None
 
 def get_session():
-    # 1. Environment variable
-    if os.environ.get("BW_SESSION"):
-        return os.environ["BW_SESSION"].strip()
-    # 2. Ramfs session file
+    # 1. Ramfs session file (shared & freshest across terminals)
     if os.path.exists(SESSION_FILE):
         try:
             with open(SESSION_FILE, "r") as f:
@@ -84,10 +81,13 @@ def get_session():
                     return token
         except Exception:
             pass
+    # 2. Environment variable fallback
+    if os.environ.get("BW_SESSION"):
+        return os.environ["BW_SESSION"].strip()
     return None
 
 def unlock_vault(force_gui=False):
-    print("🔒 Bitwarden vault is locked.")
+    print("🔒 Bitwarden vault is locked.", file=sys.stderr)
     password = None
 
     if os.path.exists(PIN_FILE):
@@ -123,17 +123,21 @@ def unlock_vault(force_gui=False):
 
 def ensure_session(force_gui=False):
     token = get_session()
-    if not token:
-        token = unlock_vault(force_gui=force_gui)
-    # Test if valid
-    res = subprocess.run(["bw", "status", "--session", token], capture_output=True, text=True)
+    cmd = ["bw", "status"]
+    if token:
+        cmd.extend(["--session", token])
+    res = subprocess.run(cmd, capture_output=True, text=True)
     try:
         status_data = json.loads(res.stdout)
-        if status_data.get("status") != "unlocked":
-            token = unlock_vault(force_gui=force_gui)
+        status = status_data.get("status")
+        if status == "unauthenticated":
+            print("❌ Bitwarden CLI nie je prihlásený. Spusti: bw login", file=sys.stderr)
+            sys.exit(1)
+        if status == "unlocked" and token:
+            return token
     except Exception:
-        token = unlock_vault(force_gui=force_gui)
-    return token
+        pass
+    return unlock_vault(force_gui=force_gui)
 
 def find_ssh_items(session, target_name=None):
     res = subprocess.run(["bw", "list", "items", "--session", session], capture_output=True, text=True)
@@ -286,11 +290,17 @@ def cmd_lock(args):
     subprocess.run(["ssh-add", "-D"])
     print("🔒 Vault locked, session cache deleted, and ssh-agent identities cleared.")
 
+def cmd_session(args):
+    force_gui = "--gui" in args
+    token = ensure_session(force_gui=force_gui)
+    print(token)
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] in ["-h", "--help", "help"]:
         print("Usage: bw-ssh [command] [args]")
         print("Commands:")
         print("  load [name]      Load SSH key(s) into ssh-agent (default)")
+        print("  session          Ensure unlocked vault (via PIN) and print session token")
         print("  set-pin          Set up quick PIN unlock (GUI prompt or CLI)")
         print("  remove-pin       Remove PIN unlock and revert to Master Password")
         print("  list             List all SSH keys in vault")
@@ -302,6 +312,8 @@ def main():
     
     if subcmd == "list":
         cmd_list(sys.argv[2:])
+    elif subcmd == "session":
+        cmd_session(sys.argv[2:])
     elif subcmd == "status":
         cmd_status(sys.argv[2:])
     elif subcmd == "lock":
