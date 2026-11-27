@@ -4,12 +4,30 @@ export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
 [ -d "/usr/lib/ccache" ] && export PATH="/usr/lib/ccache:$PATH"
 export EDITOR="${EDITOR:-micro}"
 
-# Bitwarden SSH agent (detekuje automaticky Flatpak aj natívnu inštaláciu a prebije defaultný gnome-keyring)
-if [ -S "$HOME/.var/app/com.bitwarden.desktop/data/.bitwarden-ssh-agent.sock" ]; then
+# Bitwarden SSH agent (použije živý Flatpak/natívny socket, inak fallback na systémový openssh_agent)
+_bw_sock_alive() {
+    [ -S "$1" ] || return 1
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM); s.settimeout(0.2); s.connect(sys.argv[1]); s.close()' "$1" 2>/dev/null
+    elif command -v ss >/dev/null 2>&1; then
+        ss -xlH 2>/dev/null | grep -Fq "$1"
+    else
+        return 0
+    fi
+}
+
+if _bw_sock_alive "$HOME/.var/app/com.bitwarden.desktop/data/.bitwarden-ssh-agent.sock"; then
     export SSH_AUTH_SOCK="$HOME/.var/app/com.bitwarden.desktop/data/.bitwarden-ssh-agent.sock"
-elif [ -S "$HOME/.bitwarden-ssh-agent.sock" ]; then
+elif _bw_sock_alive "$HOME/.bitwarden-ssh-agent.sock"; then
     export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
+else
+    _openssh_sock="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/openssh_agent"
+    if { [ -z "${SSH_AUTH_SOCK:-}" ] || ! _bw_sock_alive "$SSH_AUTH_SOCK"; } && _bw_sock_alive "$_openssh_sock"; then
+        export SSH_AUTH_SOCK="$_openssh_sock"
+    fi
+    unset _openssh_sock
 fi
+unset -f _bw_sock_alive
 
 # Bitwarden CLI in-memory session loader (RAMFS tmpfs)
 if [ -z "$BW_SESSION" ]; then
